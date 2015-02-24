@@ -1,0 +1,4 @@
+Example usage:
+
+python sample_solution.py --input input/train-small.csv --output output.csv
+python evaluate.py output.csv input/train-small.csv
