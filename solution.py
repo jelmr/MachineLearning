@@ -3,10 +3,12 @@ import sys
 import logging
 import argparse
 import numpy as np
+import scipy
 from sklearn.decomposition import PCA
+from sklearn.svm import SVR
 
 NUMBER_OF_PREDICTIONS = 70
-NUMBER_OF_FEATURES = 5
+NUMBER_OF_FEATURES = 19
 OUTLIERS_VALUE = 9999
 
 logger = logging.getLogger("example")
@@ -31,32 +33,22 @@ def produce_solution(args):
 
     write_header(writer, NUMBER_OF_PREDICTIONS)
 
-    header = reader.next()
-    id_ind = header.index('Id')
-    rr1_ind = header.index('RR1')
-    time_ind = header.index('TimeToEnd')
 
-    data = preprocess_data(list(reader))
+    raw_data = np.array(list(reader))
 
-    #for i, row in enumerate(reader):
+    expected_id = np.where(raw_data[0] == 'Expected')
+    expected_values = raw_data[1:,expected_id].flatten()
 
+    # Remove the expected values column from the data.
+    raw_data = np.delete(raw_data, expected_id, 1)
+    data = preprocess_data(raw_data)
 
+    predictor = {
+            'rr1': predict_rr1(data),
+            'svr': predict_svr(data, expected_values)
+            }[args.method]
 
-        # rr1 = np.array(row[rr1_ind].split(' '), dtype='float')
-        # avg_rr1 = np.mean(rr1)
-
-        # times = np.array(row[time_ind].split(' '), dtype='float')
-        # time_period = (np.max(times) - np.min(times) + 6.) / 60.
-
-        # approx_rr1 = sigmoid(avg_rr1 * time_period, 70)
-
-        # id_num = row[id_ind]
-        # solution_row = [id_num]
-        # solution_row.extend(approx_rr1)
-        # writer.writerow(solution_row)
-
-        # if i % 1000 == 0:
-        #     logger.info("Completed row %d" % i)
+    evaluate(predictor, data, writer)
 
 def write_header(writer, n):
     solution_header = ['Id']
@@ -64,30 +56,68 @@ def write_header(writer, n):
     writer.writerow(solution_header)
 
 def preprocess_data(data):
+    logger.info("Starting preprocessing.")
+    header = data[0]
     # Flatten data by taking mean of measurements.
+    # TODO: Use scipy/numpy methods?
     data = map(lambda y:
             map(lambda x: np.mean(np.array(x.split(' ')).astype(np.float)), y),
-            data)
+            data[1:])
 
     # Replace nan by 0s
     data = np.nan_to_num(data)
 
+    # TODO: Use scipy/numpy methods?
     # Remove extreme values (measurement errors)
     data = np.array(map(lambda y:
             map(lambda x: 0 if x > OUTLIERS_VALUE or x < -OUTLIERS_VALUE else x, y), data))
 
+    logger.info("Done with preprocessing.")
 
-    pca = PCA(n_components=NUMBER_OF_FEATURES)
+    return np.vstack((header, data))
+
+def evaluate(predict, data, writer):
+
+    for i, row in enumerate(data[1:]):
+        prediction = sigmoid(np.float(predict(row)) / 10, 70)
+
+        solution_row = [row[np.where(data[0] == 'Id')][0][0]]
+        solution_row.extend(prediction)
+        writer.writerow(solution_row)
+
+        if i % 1000 == 0:
+            logger.info("Completed row %d" % i)
+
+
+def predict_rr1(data):
+    return lambda x: x[np.where(data[0]=='RR1')[0][0]]
+
+
+def predict_svr(data, expected_values):
+    logger.info("Starting feature reduction.")
+    data = reduce_features(data[1:], NUMBER_OF_FEATURES)
+    logger.info("Done with feature reduction.")
+
+    logger.info("Starting SVR training.")
+    clf = SVR(C=1.0, epsilon=0.2)
+    clf.fit(data, expected_values)
+    logger.info("Done with SVR training.")
+    return clf.predict
+
+
+def reduce_features(data, number_of_features):
+    pca = PCA(n_components=number_of_features)
     data = pca.fit_transform(data)
-    print data
     return data
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--input', type=argparse.FileType('r'),
+    parser.add_argument('input', type=argparse.FileType('r'),
                         help=("path to an input file, this will "
                               "typically be train_2013.csv or "
                               "test_2014.csv"))
+    parser.add_argument('method', choices=['rr1', 'svr'],
+                        help=("Method to be used to generate the solution."))
     parser.add_argument('--output', type=argparse.FileType('w'),
                         default=sys.stdout,
                         help=("path to an output file, "
