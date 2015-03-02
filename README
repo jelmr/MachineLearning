@@ -1,4 +1,26 @@
-Example usage:
+SOLUTION.PY
 
-python sample_solution.py --input input/train-small.csv --output output.csv
-python evaluate.py output.csv input/train-small.csv
+usage: solution.py [-h] [--output OUTPUT] input {rr1,svr}
+
+positional arguments:
+  input            path to an input file, this will typically be
+                   train_2013.csv or test_2014.csv
+  {rr1,svr}        Method to be used to generate the solution.
+
+optional arguments:
+  -h, --help       show this help message and exit
+  --output OUTPUT  path to an output file, defaults to stdout
+
+============================================================================
+
+EVALUATE.PY
+
+usage: evaluate.py [-h] [--plot PLOT] results input
+
+positional arguments:
+  results      File containing the results of the algorithm.
+  input        Path to the original input file used to generate the results.
+
+optional arguments:
+  -h, --help   show this help message and exit
+  --plot PLOT  Name for the badness plot.
