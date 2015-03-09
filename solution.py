@@ -3,9 +3,15 @@ import sys
 import logging
 import argparse
 import numpy as np
+from functools import partial
 import scipy
 from sklearn.decomposition import PCA
 from sklearn.svm import SVR
+
+from sklearn.cross_validation import train_test_split
+from sklearn.neural_network import BernoulliRBM
+from sklearn.pipeline import Pipeline
+from sklearn import linear_model, metrics
 
 NUMBER_OF_PREDICTIONS = 70
 NUMBER_OF_FEATURES = 19
@@ -43,12 +49,14 @@ def produce_solution(args):
     raw_data = np.delete(raw_data, expected_id, 1)
     data = preprocess_data(raw_data)
 
+
     predictor = {
-            'rr1': predict_rr1(data),
-            'svr': predict_svr(data, expected_values)
+            'rr1': partial(predict_rr1, data),
+            'svr': partial(predict_svr, data, expected_values),
+            'nn': partial(predict_nn , data, expected_values)
             }[args.method]
 
-    evaluate(predictor, data, writer)
+    print_solution_distribution(predictor(), data, writer)
 
 def write_header(writer, n):
     solution_header = ['Id']
@@ -76,7 +84,8 @@ def preprocess_data(data):
 
     return np.vstack((header, data))
 
-def evaluate(predict, data, writer):
+
+def print_solution_distribution(predict, data, writer):
 
     for i, row in enumerate(data[1:]):
         prediction = sigmoid(np.float(predict(row)) / 10, 70)
@@ -104,6 +113,40 @@ def predict_svr(data, expected_values):
     logger.info("Done with SVR training.")
     return clf.predict
 
+def predict_nn(data, expected_values):
+    logger.info("Starting feature reduction.")
+    X = np.asarray(data[1:], 'float64')
+    logger.info("Done with feature reduction.")
+    Y = expected_values
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y,
+                                                        test_size=0.2,
+                                                        random_state=0)
+
+    logger.info("Starting NeuralNetwork training.")
+
+    logistic = linear_model.LogisticRegression()
+    rbm = BernoulliRBM(random_state=0, verbose=True)
+    clf = Pipeline(steps=[('rbm', rbm), ('logistic', logistic)])
+
+    rbm.learning_rate = 0.06
+    rbm.n_iter = 20
+    rbm.n_components = 100
+    logistic.C = 1.0
+
+
+    clf.fit(X_train, Y_train)
+
+
+    # Evaluation
+    #TODO: Make unified evaluation
+    logger.info("Logistic regression using RBM features:\n%s\n" % (
+            metrics.classification_report(
+            Y_test,
+            clf.predict(X_test))))
+
+    logger.info("Done with NeuralNetwork training.")
+    return lambda x: np.array(clf.predict(x)).astype(float)
+
 
 def reduce_features(data, number_of_features):
     pca = PCA(n_components=number_of_features)
@@ -116,7 +159,7 @@ if __name__ == "__main__":
                         help=("path to an input file, this will "
                               "typically be train_2013.csv or "
                               "test_2014.csv"))
-    parser.add_argument('method', choices=['rr1', 'svr'],
+    parser.add_argument('method', choices=['rr1', 'svr', 'nn'],
                         help=("Method to be used to generate the solution."))
     parser.add_argument('--output', type=argparse.FileType('w'),
                         default=sys.stdout,
