@@ -27,10 +27,6 @@ logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
 
 
-def sigmoid(center, length):
-    # http://en.wikipedia.org/wiki/Sigmoid_function
-    xs = np.arange(length)
-    return 1. / (1 + np.exp(-(xs - center)))
 
 
 def produce_solution(args):
@@ -88,7 +84,7 @@ def preprocess_data(data):
 def print_solution_distribution(predict, data, writer):
 
     for i, row in enumerate(data[1:]):
-        prediction = sigmoid(np.float(predict(row)) / 10, 70)
+        prediction = predict(row)
 
         solution_row = [row[np.where(data[0] == 'Id')][0][0]]
         solution_row.extend(prediction)
@@ -97,9 +93,15 @@ def print_solution_distribution(predict, data, writer):
         if i % 1000 == 0:
             logger.info("Completed row %d" % i)
 
+def wrap_threshold_distribtuion(prediction):
+    return [0 if x < prediction else 1 for x in range(70)]
+
+def wrap_sigmoid_distribution(prediction, length=70):
+    xs = np.arange(length)
+    return 1. / (1 + np.exp(-(xs - prediction)))
 
 def predict_rr1(data):
-    return lambda x: x[np.where(data[0]=='RR1')[0][0]]
+    return lambda x: wrap_sigmoid_distribution(np.float(x[np.where(data[0]=='RR1')[0][0]]))
 
 
 def predict_svr(data, expected_values):
@@ -111,7 +113,7 @@ def predict_svr(data, expected_values):
     clf = SVR(C=1.0, epsilon=0.2)
     clf.fit(data, expected_values)
     logger.info("Done with SVR training.")
-    return clf.predict
+    return lambda x: wrap_threshold_distribtuion(clf.predict(x))
 
 def predict_nn(data, expected_values):
     logger.info("Starting feature reduction.")
@@ -145,7 +147,7 @@ def predict_nn(data, expected_values):
             clf.predict(X_test))))
 
     logger.info("Done with NeuralNetwork training.")
-    return lambda x: np.array(clf.predict(x)).astype(float)
+    return lambda x: wrap_threshold_distribtuion(np.array(clf.predict(x)).astype(float))
 
 
 def reduce_features(data, number_of_features):
