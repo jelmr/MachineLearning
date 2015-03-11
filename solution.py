@@ -68,6 +68,11 @@ def preprocess_data(data):
             map(lambda x: np.mean(np.array(x.split(' ')).astype(np.float)), y),
             data[1:])
 
+    # Correct RR3
+    for x in data:
+        rr3_id = np.where(header == 'RR3')[0][0]
+        x[rr3_id] = abs(x[rr3_id])
+
     # Replace nan by 0s
     data = np.nan_to_num(data)
 
