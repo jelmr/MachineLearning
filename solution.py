@@ -31,35 +31,36 @@ logger.setLevel(logging.DEBUG)
 
 def produce_solution(args):
     writer = csv.writer(args.output, delimiter=',')
-    reader = csv.reader(args.input, delimiter=',')
+    reader_train = csv.reader(args.train, delimiter=',')
+    reader_test = csv.reader(args.test, delimiter=',')
 
     write_header(writer, NUMBER_OF_PREDICTIONS)
 
-
-    raw_data = np.array(list(reader))
-
-    expected_id = np.where(raw_data[0] == 'Expected')
-    expected_values = raw_data[1:,expected_id].flatten()
-
-    # Remove the expected values column from the data.
-    raw_data = np.delete(raw_data, expected_id, 1)
-    data = preprocess_data(raw_data, expected_values)
-
+    train_data, expected_train_values = preprocess_data(*split_dataset(np.array(list(reader_train))), remove_high_rr=True)
+    test_data, expected_test_values = preprocess_data(*split_dataset(np.array(list(reader_test))), remove_high_rr=False)
 
     predictor = {
-            'rr1': partial(train_rr1, data),
-            'svr': partial(train_svr, data, expected_values),
-            'nn': partial(train_nn , data, expected_values)
+            'rr1': partial(train_rr1, train_data),
+            'svr': partial(train_svr, train_data, expected_train_values),
+            'nn': partial(train_nn , train_data, expected_train_values)
             }[args.method]
 
-    print_solution_distribution(predictor(), data, writer)
+    print_solution_distribution(predictor(), test_data, writer)
+
+def split_dataset(data):
+    expected_id = np.where(data[0] == 'Expected')
+    expected_values = data[1:,expected_id].flatten()
+
+    # Remove the expected values column from the data.
+    data = np.delete(data, expected_id, 1)
+    return data, expected_values
 
 def write_header(writer, n):
     solution_header = ['Id']
     solution_header.extend(['Predicted{0}'.format(t) for t in xrange(0, n)])
     writer.writerow(solution_header)
 
-def preprocess_data(data, expected_values):
+def preprocess_data(data, expected_values, remove_high_rr=False):
     logger.info("Starting preprocessing.")
     header = data[0]
     # Flatten data by taking mean of measurements.
@@ -77,11 +78,11 @@ def preprocess_data(data, expected_values):
     data = np.nan_to_num(data)
 
     # Remove entries where Expected < 70
-    data[:,map(lambda x: float(x) < 70, expected_values) < 70]
-    expected_values = filter(lambda x: x<70, expected_values)
-
-    print len(data)
-    print len(expected_values)
+    if remove_high_rr:
+        a = map(lambda x: float(x) < 70, expected_values)
+        b = filter(lambda x: a[x], range(len(expected_values)))
+        data = data[b]
+        expected_values = filter(lambda x: float(x)<70, expected_values)
 
 
     # TODO: Use scipy/numpy methods?
@@ -91,7 +92,7 @@ def preprocess_data(data, expected_values):
 
     logger.info("Done with preprocessing.")
 
-    return np.vstack((header, data))
+    return np.vstack((header, data)), expected_values
 
 
 def print_solution_distribution(predict, data, writer):
@@ -170,10 +171,10 @@ def reduce_features(data, number_of_features):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('input', type=argparse.FileType('r'),
-                        help=("path to an input file, this will "
-                              "typically be train_2013.csv or "
-                              "test_2014.csv"))
+    parser.add_argument('train', type=argparse.FileType('r'),
+                        help=("The trainig data."))
+    parser.add_argument('test', type=argparse.FileType('r'),
+                        help=("The test data."))
     parser.add_argument('method', choices=['rr1', 'svr', 'nn'],
                         help=("Method to be used to generate the solution."))
     parser.add_argument('--output', type=argparse.FileType('w'),
