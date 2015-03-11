@@ -47,9 +47,9 @@ def produce_solution(args):
 
 
     predictor = {
-            'rr1': partial(predict_rr1, data),
-            'svr': partial(predict_svr, data, expected_values),
-            'nn': partial(predict_nn , data, expected_values)
+            'rr1': partial(train_rr1, data),
+            'svr': partial(train_svr, data, expected_values),
+            'nn': partial(train_nn , data, expected_values)
             }[args.method]
 
     print_solution_distribution(predictor(), data, writer)
@@ -100,11 +100,11 @@ def wrap_sigmoid_distribution(prediction, length=70):
     xs = np.arange(length)
     return 1. / (1 + np.exp(-(xs - prediction)))
 
-def predict_rr1(data):
+def train_rr1(data):
     return lambda x: wrap_sigmoid_distribution(np.float(x[np.where(data[0]=='RR1')[0][0]]))
 
 
-def predict_svr(data, expected_values):
+def train_svr(data, expected_values):
     logger.info("Starting feature reduction.")
     data = reduce_features(data[1:], NUMBER_OF_FEATURES)
     logger.info("Done with feature reduction.")
@@ -115,7 +115,7 @@ def predict_svr(data, expected_values):
     logger.info("Done with SVR training.")
     return lambda x: wrap_threshold_distribtuion(clf.predict(x))
 
-def predict_nn(data, expected_values):
+def train_nn(data, expected_values):
     logger.info("Starting feature reduction.")
     X = np.asarray(data[1:], 'float64')
     logger.info("Done with feature reduction.")
