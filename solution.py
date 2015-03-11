@@ -43,7 +43,7 @@ def produce_solution(args):
 
     # Remove the expected values column from the data.
     raw_data = np.delete(raw_data, expected_id, 1)
-    data = preprocess_data(raw_data)
+    data = preprocess_data(raw_data, expected_values)
 
 
     predictor = {
@@ -59,7 +59,7 @@ def write_header(writer, n):
     solution_header.extend(['Predicted{0}'.format(t) for t in xrange(0, n)])
     writer.writerow(solution_header)
 
-def preprocess_data(data):
+def preprocess_data(data, expected_values):
     logger.info("Starting preprocessing.")
     header = data[0]
     # Flatten data by taking mean of measurements.
@@ -75,6 +75,14 @@ def preprocess_data(data):
 
     # Replace nan by 0s
     data = np.nan_to_num(data)
+
+    # Remove entries where Expected < 70
+    data[:,map(lambda x: float(x) < 70, expected_values) < 70]
+    expected_values = filter(lambda x: x<70, expected_values)
+
+    print len(data)
+    print len(expected_values)
+
 
     # TODO: Use scipy/numpy methods?
     # Remove extreme values (measurement errors)
