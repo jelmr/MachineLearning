@@ -63,7 +63,7 @@ def train_threshold_classifier(train_data, expected_train_values, test_data, exp
 
     reg_data, expected_reg_values = zip(*(filter(lambda (row, exp): int(float(exp)) != 0 ,zip(train_data[1:], expected_train_values))))
     print "Reg data: %d\nReg exp: %d\n" % (len(reg_data), len(expected_reg_values))
-    reg_predictor = train_nn(np.vstack((train_data[0],reg_data)), expected_reg_values)
+    reg_predictor = train_lg(np.vstack((train_data[0],reg_data)), expected_reg_values)
 
 
 
@@ -104,7 +104,7 @@ def train_boolean_predictor(data, expected_values):
     expected_values = map(lambda x: 0 if int(float(x)) == 0 else 1, expected_values)
 
     # Make an equal amount of zeroes and ones.
-    if(False):
+    if(True):
         ones = filter(lambda (x,y): y == 1, zip(data,  expected_values))
         zeroes = filter(lambda (x,y): y == 0, zip(data,  expected_values))
         m = min(len(ones), len(zeroes))
@@ -274,8 +274,8 @@ def train_lg(data, expected_values):
 
     #return lambda x: wrap_threshold_distribtuion(clf.predict(np.asarray(x[7:8], 'float')))
     logger.info("I: %s" % Y_train[15])
-    logger.info("T: %s" % clf.predict_proba(X_train[15])[0])
-    return lambda x: clf.predict_proba(np.asarray(x[7:8], 'float')).flatten()
+    logger.info("T: %s" % np.cumsum(clf.predict_proba(X_train[15])[0]))
+    return lambda x: np.cumsum(clf.predict_proba(np.asarray(x[7:8], 'float')).flatten())
 
 
 def train_svr(data, expected_values):
