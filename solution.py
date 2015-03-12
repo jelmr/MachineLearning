@@ -50,7 +50,7 @@ def produce_solution(args):
             'rr1': partial(train_rr1, train_data, expected_train_values),
             'svr': partial(train_svr, train_data, expected_train_values),
             'nn': partial(train_nn , train_data, expected_train_values),
-            'lg': partial(train_lg , train_data, expected_train_values)
+            'lg': partial(train_lg , train_data, expected_train_values),
             'tc': partial(train_threshold_classifier, train_data, expected_train_values, test_data, expected_test_values)
             }[args.method]
 
