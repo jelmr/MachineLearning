@@ -104,7 +104,7 @@ def train_boolean_predictor(data, expected_values):
     expected_values = map(lambda x: 0 if int(float(x)) == 0 else 1, expected_values)
 
     # Make an equal amount of zeroes and ones.
-    if(True):
+    if(False):
         ones = filter(lambda (x,y): y == 1, zip(data,  expected_values))
         zeroes = filter(lambda (x,y): y == 0, zip(data,  expected_values))
         m = min(len(ones), len(zeroes))
@@ -122,7 +122,7 @@ def train_boolean_predictor(data, expected_values):
 
     #clf = tree.DecisionTreeClassifier(max_depth=3)
 
-    clf = SGDClassifier(loss="log", penalty="l2")
+    clf = SGDClassifier(loss="log", penalty="l2", n_jobs=-1, class_weight={0:1, 1:5})
 
     clf.fit(data, expected_values)
     return clf.predict
@@ -238,44 +238,33 @@ def train_lg(data, expected_values):
     X = np.asarray(data[1:], 'float')
     Y = np.round(np.asarray(expected_values, 'float'))
     #Y = expected_values
-    logger.info("Y: %s" % Y)
     S = zip(X, Y)
     S = filter(lambda (x,y): (y != 0) and (y < 70), S)
-    S = filter(lambda (x,y): abs(x[7] - y) < 4, S)
+    S = filter(lambda (x,y): abs(x[7] - y) < 3, S)
     X, Y = zip(*S)
     X = np.array(X)
-    X = X[:,7:8]
-    clf = linear_model.LogisticRegression()
+    X = X[:,[7,8,9,17]]
+    clf = linear_model.LogisticRegression(C=600)
     X_train, X_test, Y_train, Y_test = train_test_split(X, Y,
-                                                        test_size=0.5,
+                                                        test_size=0.2,
                                                         random_state=0)
-
-
-    logger.info("Classes: %s" % X_train)
-    for i in range(70):
-        X_train = np.concatenate((X_train, [[float(i)]]), axis=0)
-        Y_train = np.concatenate((Y_train, [float(i)]), axis=0)
-        X_test = np.concatenate((X_test, [[float(i)]]), axis=0)
-        Y_test = np.concatenate((Y_test, [float(i)]), axis=0)
-
-
-
-    logger.info("Classes: %s" % X_train)
     clf.fit(X_train,Y_train)
 
-
-    logger.info("Classes: %s" % clf.classes_)
-    logger.info("TEST: %s" % clf.predict(X[15])[0])
     logger.info("Logistic regression using RBM features:\n%s\n" % (
             metrics.classification_report(
             Y_test,
             clf.predict(X_test))))
 
 
-    #return lambda x: wrap_threshold_distribtuion(clf.predict(np.asarray(x[7:8], 'float')))
-    logger.info("I: %s" % Y_train[15])
-    logger.info("T: %s" % np.cumsum(clf.predict_proba(X_train[15])[0]))
-    return lambda x: np.cumsum(clf.predict_proba(np.asarray(x[7:8], 'float')).flatten())
+    return lambda x: np.cumsum(fix_dist(x, clf))
+
+
+def fix_dist(row, clf):
+    x = np.asarray(row[[7,8,9,17]], 'float')
+    dist = clf.predict_proba(x).flatten()
+    d = dict(zip(clf.classes_, dist))
+    y = [d.get(i, 0) for i in range(70)]
+    return y
 
 
 def train_svr(data, expected_values):
