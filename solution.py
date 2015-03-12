@@ -50,22 +50,28 @@ def produce_solution(args):
             'rr1': partial(train_rr1, train_data, expected_train_values),
             'svr': partial(train_svr, train_data, expected_train_values),
             'nn': partial(train_nn , train_data, expected_train_values),
-            'tc': partial(train_threshold_classifier, train_data, expected_train_values),
             'lg': partial(train_lg , train_data, expected_train_values)
+            'tc': partial(train_threshold_classifier, train_data, expected_train_values, test_data, expected_test_values)
             }[args.method]
 
     print_solution_distribution(predictor(), test_data, expected_test_values, writer)
 
-def train_threshold_classifier(train_data, expected_train_values):
-    boolean_predictor = train_boolean_predictor(train_data, expected_train_values)
+def train_threshold_classifier(train_data, expected_train_values, test_data, expected_test_values):
+    boolean_predictor = train_boolean_predictor(train_data[:,[7,8,9,17]], expected_train_values)
+
+    evaluate(boolean_predictor, test_data, expected_test_values)
 
     reg_data, expected_reg_values = zip(*(filter(lambda (row, exp): int(float(exp)) != 0 ,zip(train_data[1:], expected_train_values))))
     print "Reg data: %d\nReg exp: %d\n" % (len(reg_data), len(expected_reg_values))
     reg_predictor = train_nn(np.vstack((train_data[0],reg_data)), expected_reg_values)
 
-    return lambda x: [1]*70 if boolean_predictor(x) == 0 else reg_predictor(x)
 
-def evaluate():
+
+    return lambda x: [1]*70 if boolean_predictor(x[:,[7,8,9,17]]) == 0 else reg_predictor(x)
+
+def evaluate(boolean_predictor, test_data, expected_test_values):
+    test_data, expected_test_values = preprocess_data(test_data, expected_test_values, remove_high_rr=False)
+    test_data = test_data[:,[7,8,9,17]]
     test_data = np.array(test_data[1:]).astype(np.float)
     expected_test_values = map(lambda x: 0 if int(float(x)) == 0 else 1, expected_test_values)
     correct = 0
@@ -88,7 +94,7 @@ def evaluate():
 
 def train_boolean_predictor(data, expected_values):
 
-    data, expected_values = preprocess_data(data, expected_values, remove_high_rr=False, delete_features=False)
+    data, expected_values = preprocess_data(data, expected_values, remove_high_rr=False)
     # Keep only entries where RR1 is close to Expected.
     rr1_id = np.where(data[0] == 'RR1')[0][0]
     data, expected_values = zip(*(filter(lambda (row, exp): abs(float(row[rr1_id])- float(exp)) < 3 ,zip(data[1:], expected_values))))
@@ -98,7 +104,7 @@ def train_boolean_predictor(data, expected_values):
     expected_values = map(lambda x: 0 if int(float(x)) == 0 else 1, expected_values)
 
     # Make an equal amount of zeroes and ones.
-    if(True):
+    if(False):
         ones = filter(lambda (x,y): y == 1, zip(data,  expected_values))
         zeroes = filter(lambda (x,y): y == 0, zip(data,  expected_values))
         m = min(len(ones), len(zeroes))
@@ -202,7 +208,7 @@ def preprocess_data(data, expected_values, remove_high_rr=False, delete_features
 
 def print_solution_distribution(predict, data, expected_values, writer):
 
-    data, expected_values = preprocess_data(data, expected_values, remove_high_rr=False, delete_features=False)
+    data, expected_values = preprocess_data(data, expected_values, remove_high_rr=False)
 
     for i, row in enumerate(data[1:]):
         prediction = predict(np.array(row).astype(np.float))
@@ -222,7 +228,7 @@ def wrap_sigmoid_distribution(prediction, length=70):
     return 1. / (1 + np.exp(-(xs - prediction)))
 
 def train_rr1(data, expected_values):
-    data, expected_values = preprocess_data(data, expected_values, remove_high_rr=False, delete_features=False)
+    data, expected_values = preprocess_data(data, expected_values, remove_high_rr=False)
     return lambda x: wrap_sigmoid_distribution(np.float(x[np.where(data[0]=='RR1')[0][0]]))
 
 
@@ -273,7 +279,7 @@ def train_lg(data, expected_values):
 
 
 def train_svr(data, expected_values):
-    data, expected_values = preprocess_data(data, expected_values, remove_high_rr=False, delete_features=False)
+    data, expected_values = preprocess_data(data, expected_values, remove_high_rr=False)
     logger.info("Starting feature reduction.")
     data = reduce_features(data[1:], NUMBER_OF_FEATURES)
     logger.info("Done with feature reduction.")
@@ -285,7 +291,7 @@ def train_svr(data, expected_values):
     return lambda x: wrap_threshold_distribtuion(clf.predict(x))
 
 def train_nn(data, expected_values):
-    data, expected_values = preprocess_data(data, expected_values, remove_high_rr=False, delete_features=False)
+    data, expected_values = preprocess_data(data, expected_values, remove_high_rr=False)
     logger.info("Starting feature reduction.")
     X = np.asarray(data[1:], 'float64')
     logger.info("Done with feature reduction.")
