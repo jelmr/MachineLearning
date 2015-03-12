@@ -50,7 +50,8 @@ def produce_solution(args):
             'rr1': partial(train_rr1, train_data, expected_train_values),
             'svr': partial(train_svr, train_data, expected_train_values),
             'nn': partial(train_nn , train_data, expected_train_values),
-            'tc': partial(train_threshold_classifier, train_data, expected_train_values)
+            'tc': partial(train_threshold_classifier, train_data, expected_train_values),
+            'lg': partial(train_lg , train_data, expected_train_values)
             }[args.method]
 
     print_solution_distribution(predictor(), test_data, expected_test_values, writer)
@@ -225,6 +226,52 @@ def train_rr1(data, expected_values):
     return lambda x: wrap_sigmoid_distribution(np.float(x[np.where(data[0]=='RR1')[0][0]]))
 
 
+def train_lg(data, expected_values):
+    data, expected_values = preprocess_data(data, expected_values, remove_high_rr=False, delete_features=False)
+    logger.info("DATA: %s" % data[:1])
+    X = np.asarray(data[1:], 'float')
+    Y = np.round(np.asarray(expected_values, 'float'))
+    #Y = expected_values
+    logger.info("Y: %s" % Y)
+    S = zip(X, Y)
+    S = filter(lambda (x,y): (y != 0) and (y < 70), S)
+    S = filter(lambda (x,y): abs(x[7] - y) < 4, S)
+    X, Y = zip(*S)
+    X = np.array(X)
+    X = X[:,7:8]
+    clf = linear_model.LogisticRegression()
+    X_train, X_test, Y_train, Y_test = train_test_split(X, Y,
+                                                        test_size=0.5,
+                                                        random_state=0)
+
+
+    logger.info("Classes: %s" % X_train)
+    for i in range(70):
+        X_train = np.concatenate((X_train, [[float(i)]]), axis=0)
+        Y_train = np.concatenate((Y_train, [float(i)]), axis=0)
+        X_test = np.concatenate((X_test, [[float(i)]]), axis=0)
+        Y_test = np.concatenate((Y_test, [float(i)]), axis=0)
+
+
+
+    logger.info("Classes: %s" % X_train)
+    clf.fit(X_train,Y_train)
+
+
+    logger.info("Classes: %s" % clf.classes_)
+    logger.info("TEST: %s" % clf.predict(X[15])[0])
+    logger.info("Logistic regression using RBM features:\n%s\n" % (
+            metrics.classification_report(
+            Y_test,
+            clf.predict(X_test))))
+
+
+    #return lambda x: wrap_threshold_distribtuion(clf.predict(np.asarray(x[7:8], 'float')))
+    logger.info("I: %s" % Y_train[15])
+    logger.info("T: %s" % clf.predict_proba(X_train[15])[0])
+    return lambda x: clf.predict_proba(np.asarray(x[7:8], 'float')).flatten()
+
+
 def train_svr(data, expected_values):
     data, expected_values = preprocess_data(data, expected_values, remove_high_rr=False, delete_features=False)
     logger.info("Starting feature reduction.")
@@ -284,7 +331,7 @@ if __name__ == "__main__":
                         help=("The trainig data."))
     parser.add_argument('test', type=argparse.FileType('r'),
                         help=("The test data."))
-    parser.add_argument('method', choices=['rr1', 'svr', 'nn', 'tc'],
+    parser.add_argument('method', choices=['rr1', 'svr', 'nn', 'tc', 'lg'],
                         help=("Method to be used to generate the solution."))
     parser.add_argument('--output', type=argparse.FileType('w'),
                         default=sys.stdout,
