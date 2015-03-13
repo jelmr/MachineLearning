@@ -44,7 +44,11 @@ def produce_solution(args):
     write_header(writer, NUMBER_OF_PREDICTIONS)
 
     train_data, expected_train_values = split_dataset(np.array(list(reader_train)))
-    test_data, expected_test_values = split_dataset(np.array(list(reader_test)))
+    if args.evaluate:
+        test_data, expected_test_values = split_dataset(np.array(list(reader_test)))
+    else:
+        test_data = np.array(list(reader_test))
+        expected_test_values = None
 
     predictor = {
             'rr1': partial(train_rr1, train_data, expected_train_values),
@@ -59,7 +63,8 @@ def produce_solution(args):
 def train_threshold_classifier(train_data, expected_train_values, test_data, expected_test_values):
     boolean_predictor = train_boolean_predictor(train_data[:,[7,8,9,17]], expected_train_values)
 
-    evaluate(boolean_predictor, test_data, expected_test_values)
+    if expected_test_values is not None:
+        evaluate(boolean_predictor, test_data, expected_test_values)
 
     reg_data, expected_reg_values = zip(*(filter(lambda (row, exp): int(float(exp)) != 0 ,zip(train_data[1:], expected_train_values))))
     print "Reg data: %d\nReg exp: %d\n" % (len(reg_data), len(expected_reg_values))
@@ -122,7 +127,7 @@ def train_boolean_predictor(data, expected_values):
 
     #clf = tree.DecisionTreeClassifier(max_depth=3)
 
-    clf = SGDClassifier(loss="log", penalty="l2", n_jobs=-1, class_weight={0:1, 1:5})
+    clf = SGDClassifier(loss="log", penalty="l2", n_jobs=-1, class_weight={0:1, 1:10})
 
     clf.fit(data, expected_values)
     return clf.predict
@@ -172,10 +177,10 @@ def preprocess_data(data, expected_values, remove_high_rr=False, delete_features
         data = data[:,keep]
 
     # Flatten data by taking mean of measurements.
-    # TODO: Use scipy/numpy methods?
-    data = map(lambda y:
-            map(lambda x: np.mean(np.array(x.split(' ')).astype(np.float)), y),
-            data[1:])
+    data = np.vectorize(lambda x: np.mean(np.array(x.split(' ')).astype(np.float)))(data[1:])
+
+    #data = map(lambda y:
+    #    map(lambda x: np.mean(np.array(x.split(' ')).astype(np.float)), y), data[1:])
 
     # Correct RR3
     for x in data:
@@ -193,10 +198,8 @@ def preprocess_data(data, expected_values, remove_high_rr=False, delete_features
         expected_values = filter(lambda x: float(x)<70, expected_values)
 
 
-    # TODO: Use scipy/numpy methods?
     # Remove extreme values (measurement errors)
-    data = np.array(map(lambda y:
-        map(lambda x: 0 if x > OUTLIERS_VALUE or x < -OUTLIERS_VALUE else x, y), data))
+    data[np.logical_or(data < -OUTLIERS_VALUE, data > OUTLIERS_VALUE)] = 0
 
     #data = np.array(map(lambda y:
     #        map(lambda x: math.log(abs(x)+0.00001) , y), data))
@@ -244,7 +247,8 @@ def train_lg(data, expected_values):
     X, Y = zip(*S)
     X = np.array(X)
     X = X[:,[7,8,9,17]]
-    clf = linear_model.LogisticRegression(C=600)
+    clf = linear_model.LogisticRegression()
+
     X_train, X_test, Y_train, Y_test = train_test_split(X, Y,
                                                         test_size=0.2,
                                                         random_state=0)
@@ -338,6 +342,9 @@ if __name__ == "__main__":
     parser.add_argument('--import_params', type=argparse.FileType('r'),
                         default=None,
                         help=("File to load trained parameters from."))
+    parser.add_argument('--evaluate', dest='evaluate', action='store_true',
+                        help=("Use if you don't know expected values."))
+    parser.set_defaults(evaluate=False)
 
     args = parser.parse_args()
     produce_solution(args)
