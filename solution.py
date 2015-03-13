@@ -5,6 +5,7 @@ import argparse
 import numpy as np
 import pickle
 import math
+import gc
 from functools import partial
 import scipy
 
@@ -49,7 +50,10 @@ def produce_solution(args):
     else:
         test_data = np.array(list(reader_test))
         expected_test_values = None
-
+    test_ids = test_data[:,0]
+    train_data = train_data[:,[0,7,8,9,17]]
+    test_data = test_data[:,[0,7,8,9,17]]
+    gc.collect()
     predictor = {
             'rr1': partial(train_rr1, train_data, expected_train_values),
             'svr': partial(train_svr, train_data, expected_train_values),
@@ -58,10 +62,12 @@ def produce_solution(args):
             'tc': partial(train_threshold_classifier, train_data, expected_train_values, test_data, expected_test_values)
             }[args.method]
 
-    print_solution_distribution(predictor(), test_data, expected_test_values, writer)
+    train_data, expected_train_values = None, None
+    gc.collect()
+    print_solution_distribution(predictor(), test_data, expected_test_values, test_ids, writer)
 
 def train_threshold_classifier(train_data, expected_train_values, test_data, expected_test_values):
-    boolean_predictor = train_boolean_predictor(train_data[:,[7,8,9,17]], expected_train_values)
+    boolean_predictor = train_boolean_predictor(train_data[:,[1,2,3,4]], expected_train_values)
 
     if expected_test_values is not None:
         evaluate(boolean_predictor, test_data, expected_test_values)
@@ -72,11 +78,11 @@ def train_threshold_classifier(train_data, expected_train_values, test_data, exp
 
 
 
-    return lambda x: [1]*70 if boolean_predictor(x[:,[7,8,9,17]]) == 0 else reg_predictor(x)
+    return lambda x: [1]*70 if boolean_predictor(x[:,[1,2,3,4]]) == 0 else reg_predictor(x)
 
 def evaluate(boolean_predictor, test_data, expected_test_values):
     test_data, expected_test_values = preprocess_data(test_data, expected_test_values, remove_high_rr=False)
-    test_data = test_data[:,[7,8,9,17]]
+    test_data = test_data[:,[1,2,3,4]]
     test_data = np.array(test_data[1:]).astype(np.float)
     expected_test_values = map(lambda x: 0 if int(float(x)) == 0 else 1, expected_test_values)
     correct = 0
@@ -209,14 +215,14 @@ def preprocess_data(data, expected_values, remove_high_rr=False, delete_features
     return np.vstack((header, data)), expected_values
 
 
-def print_solution_distribution(predict, data, expected_values, writer):
+def print_solution_distribution(predict, data, expected_values, ids, writer):
 
     data, expected_values = preprocess_data(data, expected_values, remove_high_rr=False)
 
-    for i, row in enumerate(data[1:]):
+    for id, (i, row) in zip(ids[1:], enumerate(data[1:])):
         prediction = predict(np.array(row).astype(np.float))
 
-        solution_row = [row[np.where(data[0] == 'Id')][0][0]]
+        solution_row = [id]
         solution_row.extend(prediction)
         writer.writerow(solution_row)
 
@@ -243,10 +249,10 @@ def train_lg(data, expected_values):
     #Y = expected_values
     S = zip(X, Y)
     S = filter(lambda (x,y): (y != 0) and (y < 70), S)
-    S = filter(lambda (x,y): abs(x[7] - y) < 3, S)
+    S = filter(lambda (x,y): abs(x[1] - y) < 3, S)
     X, Y = zip(*S)
     X = np.array(X)
-    X = X[:,[7,8,9,17]]
+    X = X[:,[1,2,3,4]]
     clf = linear_model.LogisticRegression()
 
     X_train, X_test, Y_train, Y_test = train_test_split(X, Y,
@@ -264,7 +270,7 @@ def train_lg(data, expected_values):
 
 
 def fix_dist(row, clf):
-    x = np.asarray(row[[7,8,9,17]], 'float')
+    x = np.asarray(row[[1,2,3,4]], 'float')
     dist = clf.predict_proba(x).flatten()
     d = dict(zip(clf.classes_, dist))
     y = [d.get(i, 0) for i in range(70)]
